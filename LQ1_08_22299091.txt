@@ -1,0 +1,101 @@
+;Question1
+
+.MODEL SMALL
+ 
+.STACK 100H       
+
+
+
+.DATA
+
+; declare variables here
+
+
+.CODE
+
+       MAIN PROC
+
+; initialize DS
+
+        MOV AX,@DATA
+        MOV DS,AX
+ 
+; enter your code here
+
+        MOV AX,1
+        MOV BX, 9
+        
+        SUB AX,BX
+        ADD BX,AX  
+        NEG AX
+        ADD AX,BX
+        
+
+
+ 
+
+;exit to DOS
+               
+        MOV AX,4C00H
+        INT 21H
+    
+    MAIN ENDP
+END MAIN
+
+
+
+
+;question2
+
+.MODEL SMALL
+ 
+.STACK 100H       
+
+
+
+.DATA
+
+; declare variables here
+  
+   RESULT db 0
+
+.CODE
+
+       MAIN PROC
+
+; initialize DS
+
+        MOV AX,@DATA
+        MOV DS,AX
+ 
+; enter your code here
+
+         MOV AX, 0DA451Ch
+         MOV BX, 0F87h 
+         DIV BX  
+         
+         MOV AH,0
+         MOV BX,AX
+         
+         MOV AX, 45
+         MOV CX, 110010b
+         MUL CX
+          
+         SUB BX, AX
+         MOV CX,62
+         
+         ADD BX,CX
+         ADD RESULT, BX
+         
+
+
+ 
+
+;exit to DOS
+               
+        MOV AX,4C00H
+        INT 21H
+    
+    MAIN ENDP
+END MAIN
+
