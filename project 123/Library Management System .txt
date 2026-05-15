@@ -1,0 +1,1610 @@
+﻿.MODEL SMALL
+.STACK 200H
+
+
+PRINT_STR MACRO strLabel
+    LEA  DX, strLabel
+    MOV  AH, 09H
+    INT  21H
+ENDM
+
+
+.DATA
+
+
+; -----------------------------------------------------------------------
+; BOOK DATABASE
+; Status: 1=Available, 0=Borrowed
+; -----------------------------------------------------------------------
+book1Title   DB "1984$"
+book1Author  DB "Orwell$"
+book1Genre   DB "Dystopia$"
+book1Status  DB 1
+book1Demand  DB 0
+
+
+book2Title   DB "Hamlet$"
+book2Author  DB "Shakespeare$"
+book2Genre   DB "Tragedy$"
+book2Status  DB 1
+book2Demand  DB 0
+
+
+book3Title   DB "Dune$"
+book3Author  DB "Herbert$"
+book3Genre   DB "SciFi$"
+book3Status  DB 1
+book3Demand  DB 0
+
+
+book4Title   DB "Hobbit$"
+book4Author  DB "Tolkien$"
+book4Genre   DB "Fantasy$"
+book4Status  DB 1
+book4Demand  DB 0
+
+
+book5Title   DB "Cosmos$"
+book5Author  DB "Sagan$"
+book5Genre   DB "Science$"
+book5Status  DB 0
+book5Demand  DB 0         
+
+
+DEMANDSCORE DB 0
+; -----------------------------------------------------------------------
+; RATING DATA  (sum of all ratings + count of ratings per book)
+; Average = RatingSum / RatingCount  (integer division, printed as byte)
+; -----------------------------------------------------------------------
+book1RatingSum   DB 0
+book1RatingCount DB 0
+
+
+book2RatingSum   DB 0
+book2RatingCount DB 0
+
+
+book3RatingSum   DB 0
+book3RatingCount DB 0
+
+
+book4RatingSum   DB 0
+book4RatingCount DB 0
+
+
+book5RatingSum   DB 0
+book5RatingCount DB 0
+
+
+; -----------------------------------------------------------------------
+; INPUT BUFFER
+; -----------------------------------------------------------------------
+inputBuf     DB 30, 0, 30 DUP('$')
+
+
+; -----------------------------------------------------------------------
+; FINE / DAY VARIABLES
+; -----------------------------------------------------------------------
+daysLate     DW 0
+fineResult   DW 0
+finePerDay   DB 5
+
+
+tempWord     DW 0
+
+
+; -----------------------------------------------------------------------
+; GENERAL MESSAGES
+; -----------------------------------------------------------------------
+CRLF         DB 13,10,'$'
+divider      DB "----------------------------------------$"
+
+
+menuTitle    DB 13,10,"====================================",13,10,'$'
+menuLine1    DB "  SMART LIBRARY MANAGEMENT SYSTEM  ",13,10,'$'
+menuLine2    DB "====================================",13,10,'$'
+menuOpt1     DB " 1. Book Demand Tracker             ",13,10,'$'
+menuOpt2     DB " 2. Advanced Book Search            ",13,10,'$'
+menuOpt3     DB " 3. Borrow a Book                   ",13,10,'$'
+menuOpt4     DB " 4. Return Book + Fine Calculation  ",13,10,'$'
+menuOpt5     DB " 5. Book Rating System              ",13,10,'$'
+menuOpt6     DB " 6. View All Books                  ",13,10,'$'
+menuOpt7     DB " 7. Exit                            ",13,10,'$'
+menuPrompt   DB 13,10,"Enter choice (1-7): $"
+
+
+pressKey     DB 13,10,"Press any key to return to menu...$"
+invalidOpt   DB 13,10,"Invalid option. Try again.$"
+
+
+; -----------------------------------------------------------------------
+; FEATURE 1 - DEMAND TRACKER MESSAGES
+; -----------------------------------------------------------------------
+demandHeader DB 13,10,"-- BOOK DEMAND TRACKER --",13,10,'$'
+demandPrompt DB 13,10,"Enter book title to check demand: $"
+demandLabel  DB "  Demand: $"
+demandHigh   DB 13,10,"*** HIGH DEMAND - Consider Restocking! ***$"
+demandMed    DB 13,10,"Moderate demand for this book.$"
+demandZero   DB 13,10,"No recorded demand for this book.$"
+demandList   DB 13,10,"[Most Demanded Books]",13,10,'$'
+d1Label      DB " 1984    : $"
+d2Label      DB " Hamlet  : $"
+d3Label      DB " Dune    : $"
+d4Label      DB " Hobbit  : $"
+d5Label      DB " Cosmos  : $"
+demandAvail  DB 13,10,"Book is currently AVAILABLE (demand not incremented).$"
+demandNF     DB 13,10,"Book not found in library.$"
+demandIncMsg DB 13,10,"Book is BORROWED - demand count incremented.$"
+
+
+; -----------------------------------------------------------------------
+; FEATURE 2 - ADVANCED SEARCH MESSAGES
+; -----------------------------------------------------------------------
+searchHeader  DB 13,10,"-- ADVANCED BOOK SEARCH --$"
+searchPrompt  DB 13,10,"Enter title/author/genre keyword: $"
+searchNoMatch DB 13,10,"No matching book found.$"
+searchDemandMsg DB 13,10,"(Unavailable book searched - demand incremented)$"
+
+
+labelTitle   DB 13,10,"  Title  : $"
+labelAuthor  DB "  Author : $"
+labelGenre   DB "  Genre  : $"
+labelStatus  DB "  Status : $"
+statusAvail  DB "Available$"
+statusBorrow DB "Borrowed $"
+
+
+; -----------------------------------------------------------------------
+; FEATURE 3 - BORROW MESSAGES
+; -----------------------------------------------------------------------
+borrowHeader  DB 13,10,"-- BORROW A BOOK --$"
+borrowPrompt  DB 13,10,"Enter book title to borrow: $"
+borrowOK      DB 13,10,"Book borrowed successfully!$"
+borrowAlready DB 13,10,"Book is already borrowed.$"
+borrowNF      DB 13,10,"Book not found.$"
+availHeader   DB 13,10,"[Available Books]$"
+
+
+; -----------------------------------------------------------------------
+; FEATURE 4 - FINE CALCULATION MESSAGES
+; -----------------------------------------------------------------------
+fineHeader   DB 13,10,"-- RETURN WITH FINE CALCULATION --$"
+finePrompt   DB 13,10,"Enter book title to return: $"
+fineDaysMsg  DB 13,10,"Enter days overdue (0 if on time, max 99): $"
+fineMsg      DB 13,10,"Fine to pay: $"
+fineTaka     DB " Taka$"
+returnOK     DB 13,10,"Book returned successfully!$"
+notBorrowed  DB 13,10,"This book was not borrowed.$"
+bookNF       DB 13,10,"Book not found.$"
+noFineMsg    DB 13,10,"No fine. Returned on time.$"
+
+
+; -----------------------------------------------------------------------
+; FEATURE 5 - RATING SYSTEM MESSAGES
+; -----------------------------------------------------------------------
+rateHeader      DB 13,10,"-- BOOK RATING SYSTEM --",13,10,'$'
+ratePrompt      DB 13,10,"Enter book title to rate: $"
+rateScaleMsg    DB 13,10,"Enter your rating (1-5): $"
+rateOK          DB 13,10,"Rating recorded. Thank you!$"
+rateInvalid     DB 13,10,"Invalid rating. Please enter 1 to 5.$"
+rateNotAvail    DB 13,10,"You can only rate a book after returning it (must be Available).$"
+rateNotFound    DB 13,10,"Book not found.$"
+rateTopHeader   DB 13,10,"[Top Rated Books]",13,10,'$'
+rateAvgLabel    DB "  Avg Rating: $"
+rateCountLabel  DB "  Total Ratings: $"
+rateNoRating    DB "  (No ratings yet)$"
+rateSlash       DB "/$"
+rateFive        DB "5$"
+rateSepLine     DB 13,10,"----------------------------------------",13,10,'$'
+
+
+; -----------------------------------------------------------------------
+; FEATURE 6 - VIEW ALL MESSAGES
+; -----------------------------------------------------------------------
+viewHeader   DB 13,10,"-- ALL BOOKS IN LIBRARY --$"
+
+
+; -----------------------------------------------------------------------
+; NUMBER OUTPUT BUFFER
+; -----------------------------------------------------------------------
+numBuf       DB 6 DUP('0'), '$'
+
+
+; Temporary byte for rating storage
+ratingInput  DB 0
+
+
+; =============================================================================
+.CODE
+
+
+; =============================================================================
+; MAIN
+; =============================================================================
+MAIN PROC
+    MOV  AX, @DATA
+    MOV  DS, AX
+
+
+MENU_LOOP:
+    CALL CLEAR_AND_SHOW_MENU
+
+
+    MOV  AH, 01H
+    INT  21H
+
+
+    CMP  AL, '1'
+    JE   GOTO_F1
+    CMP  AL, '2'
+    JE   GOTO_F2
+    CMP  AL, '3'
+    JE   GOTO_F3
+    CMP  AL, '4'
+    JE   GOTO_F4
+    CMP  AL, '5'
+    JE   GOTO_F5
+    CMP  AL, '6'
+    JE   GOTO_F6
+    CMP  AL, '7'
+    JE   GOTO_EXIT
+
+
+    PRINT_STR invalidOpt
+    JMP  WAIT_AND_LOOP
+
+
+GOTO_F1:
+    CALL FEATURE1_DEMAND
+    JMP  WAIT_AND_LOOP
+GOTO_F2:
+    CALL FEATURE2_SEARCH
+    JMP  WAIT_AND_LOOP
+GOTO_F3:
+    CALL FEATURE3_BORROW
+    JMP  WAIT_AND_LOOP
+GOTO_F4:
+    CALL FEATURE4_FINE
+    JMP  WAIT_AND_LOOP
+GOTO_F5:
+    CALL FEATURE5_RATING
+    JMP  WAIT_AND_LOOP
+GOTO_F6:
+    CALL FEATURE6_VIEWALL
+    JMP  WAIT_AND_LOOP
+
+
+WAIT_AND_LOOP:
+    PRINT_STR pressKey
+    MOV  AH, 01H
+    INT  21H
+    JMP  MENU_LOOP
+
+
+GOTO_EXIT:
+    MOV  AX, 4C00H
+    INT  21H
+MAIN ENDP
+
+
+; =============================================================================
+; CLEAR_AND_SHOW_MENU
+; =============================================================================
+CLEAR_AND_SHOW_MENU PROC
+    PRINT_STR menuTitle
+    PRINT_STR menuLine1
+    PRINT_STR menuLine2
+    PRINT_STR menuOpt1
+    PRINT_STR menuOpt2
+    PRINT_STR menuOpt3
+    PRINT_STR menuOpt4
+    PRINT_STR menuOpt5
+    PRINT_STR menuOpt6
+    PRINT_STR menuOpt7
+    PRINT_STR menuPrompt
+    RET
+CLEAR_AND_SHOW_MENU ENDP
+
+
+; =============================================================================
+; FEATURE 1: INTELLIGENT BOOK DEMAND TRACKER
+; =============================================================================
+FEATURE1_DEMAND PROC
+    PRINT_STR demandHeader
+    PRINT_STR demandList
+
+
+    PRINT_STR d1Label
+    MOV  AL, book1Demand
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+
+
+    PRINT_STR d2Label
+    MOV  AL, book2Demand
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+
+
+    PRINT_STR d3Label
+    MOV  AL, book3Demand
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+
+
+    PRINT_STR d4Label
+    MOV  AL, book4Demand
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+
+
+    PRINT_STR d5Label
+    MOV  AL, book5Demand
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+
+
+    PRINT_STR demandPrompt
+    CALL READ_INPUT
+
+
+    LEA  SI, inputBuf + 2
+    CALL TO_UPPER_SI
+
+
+    LEA  DI, inputBuf + 2
+    LEA  SI, book1Title
+    CALL CMP_UPPER
+    JNE  D1_CHK2
+    CMP  book1Status, 0
+    JNE  D1_AVAIL
+    INC  book1Demand
+    MOV  AL, book1Demand
+    MOV DEMANDSCORE,AL
+    JMP  D_SHOW_COMMON
+D1_AVAIL:
+    PRINT_STR demandAvail
+    RET
+
+
+D1_CHK2:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book2Title
+    CALL CMP_UPPER
+    JNE  D1_CHK3
+    CMP  book2Status, 0
+    JNE  D2_AVAIL
+    INC  book2Demand
+    MOV  AL, book2Demand
+     MOV DEMANDSCORE,AL
+    JMP  D_SHOW_COMMON
+D2_AVAIL:
+    PRINT_STR demandAvail
+    RET
+
+
+D1_CHK3:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book3Title
+    CALL CMP_UPPER
+    JNE  D1_CHK4
+    CMP  book3Status, 0
+    JNE  D3_AVAIL
+    INC  book3Demand
+    MOV  AL, book3Demand 
+    MOV DEMANDSCORE,AL
+    JMP  D_SHOW_COMMON
+D3_AVAIL:
+    PRINT_STR demandAvail
+    RET
+
+
+D1_CHK4:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book4Title
+    CALL CMP_UPPER
+    JNE  D1_CHK5
+    CMP  book4Status, 0
+    JNE  D4_AVAIL
+    INC  book4Demand
+    MOV  AL, book4Demand
+    MOV DEMANDSCORE,AL
+    JMP  D_SHOW_COMMON
+D4_AVAIL:
+    PRINT_STR demandAvail
+    RET
+
+
+D1_CHK5:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book5Title
+    CALL CMP_UPPER
+    JNE  D1_NF
+    CMP  book5Status, 0
+    JNE  D5_AVAIL
+    INC  book5Demand
+    MOV  AL, book5Demand
+    MOV DEMANDSCORE,AL
+    JMP  D_SHOW_COMMON
+D5_AVAIL:
+    PRINT_STR demandAvail
+    RET
+
+
+D1_NF:
+    PRINT_STR demandNF
+    RET
+
+
+D_SHOW_COMMON:
+    PRINT_STR demandIncMsg
+    PRINT_STR CRLF
+    PRINT_STR demandLabel
+    MOV AL,DEMANDSCORE
+    CALL PRINT_NUM_BYTE
+    CMP  AL, 3
+    JB   D_CHK_MED
+    PRINT_STR demandHigh
+    RET
+D_CHK_MED:
+    CMP  AL, 1
+    JB   D_NO_DEMAND
+    PRINT_STR demandMed
+    RET
+D_NO_DEMAND:
+    PRINT_STR demandZero
+    RET
+FEATURE1_DEMAND ENDP
+
+
+; =============================================================================
+; FEATURE 2: ADVANCED BOOK SEARCH
+; =============================================================================
+FEATURE2_SEARCH PROC
+    PRINT_STR searchHeader
+    PRINT_STR searchPrompt
+    CALL READ_INPUT
+
+
+    LEA  SI, inputBuf + 2
+    CALL TO_UPPER_SI
+
+
+    MOV  CX, 0
+
+
+    LEA  DI, inputBuf + 2
+    LEA  SI, book1Title
+    CALL PARTIAL_MATCH
+    JNE  S_B1_AUTH
+    INC  CX
+    CALL PRINT_BOOK1
+    CMP  book1Status, 0
+    JNE  S_B2
+    INC  book1Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B2
+S_B1_AUTH:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book1Author
+    CALL PARTIAL_MATCH
+    JNE  S_B1_GEN
+    INC  CX
+    CALL PRINT_BOOK1
+    CMP  book1Status, 0
+    JNE  S_B2
+    INC  book1Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B2
+S_B1_GEN:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book1Genre
+    CALL PARTIAL_MATCH
+    JNE  S_B2
+    INC  CX
+    CALL PRINT_BOOK1
+    CMP  book1Status, 0
+    JNE  S_B2
+    INC  book1Demand
+    PRINT_STR searchDemandMsg
+
+
+S_B2:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book2Title
+    CALL PARTIAL_MATCH
+    JNE  S_B2_AUTH
+    INC  CX
+    CALL PRINT_BOOK2
+    CMP  book2Status, 0
+    JNE  S_B3
+    INC  book2Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B3
+S_B2_AUTH:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book2Author
+    CALL PARTIAL_MATCH
+    JNE  S_B2_GEN
+    INC  CX
+    CALL PRINT_BOOK2
+    CMP  book2Status, 0
+    JNE  S_B3
+    INC  book2Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B3
+S_B2_GEN:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book2Genre
+    CALL PARTIAL_MATCH
+    JNE  S_B3
+    INC  CX
+    CALL PRINT_BOOK2
+    CMP  book2Status, 0
+    JNE  S_B3
+    INC  book2Demand
+    PRINT_STR searchDemandMsg
+
+
+S_B3:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book3Title
+    CALL PARTIAL_MATCH
+    JNE  S_B3_AUTH
+    INC  CX
+    CALL PRINT_BOOK3
+    CMP  book3Status, 0
+    JNE  S_B4
+    INC  book3Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B4
+S_B3_AUTH:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book3Author
+    CALL PARTIAL_MATCH
+    JNE  S_B3_GEN
+    INC  CX
+    CALL PRINT_BOOK3
+    CMP  book3Status, 0
+    JNE  S_B4
+    INC  book3Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B4
+S_B3_GEN:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book3Genre
+    CALL PARTIAL_MATCH
+    JNE  S_B4
+    INC  CX
+    CALL PRINT_BOOK3
+    CMP  book3Status, 0
+    JNE  S_B4
+    INC  book3Demand
+    PRINT_STR searchDemandMsg
+
+
+S_B4:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book4Title
+    CALL PARTIAL_MATCH
+    JNE  S_B4_AUTH
+    INC  CX
+    CALL PRINT_BOOK4
+    CMP  book4Status, 0
+    JNE  S_B5
+    INC  book4Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B5
+S_B4_AUTH:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book4Author
+    CALL PARTIAL_MATCH
+    JNE  S_B4_GEN
+    INC  CX
+    CALL PRINT_BOOK4
+    CMP  book4Status, 0
+    JNE  S_B5
+    INC  book4Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_B5
+S_B4_GEN:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book4Genre
+    CALL PARTIAL_MATCH
+    JNE  S_B5
+    INC  CX
+    CALL PRINT_BOOK4
+    CMP  book4Status, 0
+    JNE  S_B5
+    INC  book4Demand
+    PRINT_STR searchDemandMsg
+
+
+S_B5:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book5Title
+    CALL PARTIAL_MATCH
+    JNE  S_B5_AUTH
+    INC  CX
+    CALL PRINT_BOOK5
+    CMP  book5Status, 0
+    JNE  S_DONE
+    INC  book5Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_DONE
+S_B5_AUTH:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book5Author
+    CALL PARTIAL_MATCH
+    JNE  S_B5_GEN
+    INC  CX
+    CALL PRINT_BOOK5
+    CMP  book5Status, 0
+    JNE  S_DONE
+    INC  book5Demand
+    PRINT_STR searchDemandMsg
+    JMP  S_DONE
+S_B5_GEN:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book5Genre
+    CALL PARTIAL_MATCH
+    JNE  S_DONE
+    INC  CX
+    CALL PRINT_BOOK5
+    CMP  book5Status, 0
+    JNE  S_DONE
+    INC  book5Demand
+    PRINT_STR searchDemandMsg
+
+
+S_DONE:
+    CMP  CX, 0
+    JNE  S_EXIT
+    PRINT_STR searchNoMatch
+S_EXIT:
+    RET
+FEATURE2_SEARCH ENDP
+
+
+; =============================================================================
+; FEATURE 3: BOOK BORROWING SYSTEM
+; =============================================================================
+FEATURE3_BORROW PROC
+    PRINT_STR borrowHeader
+    PRINT_STR availHeader
+
+
+    CMP  book1Status, 1
+    JNE  F3_B2
+    CALL PRINT_BOOK1
+F3_B2:
+    CMP  book2Status, 1
+    JNE  F3_B3
+    CALL PRINT_BOOK2
+F3_B3:
+    CMP  book3Status, 1
+    JNE  F3_B4
+    CALL PRINT_BOOK3
+F3_B4:
+    CMP  book4Status, 1
+    JNE  F3_B5
+    CALL PRINT_BOOK4
+F3_B5:
+    CMP  book5Status, 1
+    JNE  F3_PROMPT
+    CALL PRINT_BOOK5
+
+
+F3_PROMPT:
+    PRINT_STR borrowPrompt
+    CALL READ_INPUT
+
+
+    LEA  SI, inputBuf + 2
+    CALL TO_UPPER_SI
+
+
+    LEA  DI, inputBuf + 2
+    LEA  SI, book1Title
+    CALL CMP_UPPER
+    JNE  F3_C2
+    CMP  book1Status, 1
+    JNE  F3_ALREADY
+    MOV  book1Status, 0
+    JMP  F3_SUCCESS
+F3_C2:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book2Title
+    CALL CMP_UPPER
+    JNE  F3_C3
+    CMP  book2Status, 1
+    JNE  F3_ALREADY
+    MOV  book2Status, 0
+    JMP  F3_SUCCESS
+F3_C3:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book3Title
+    CALL CMP_UPPER
+    JNE  F3_C4
+    CMP  book3Status, 1
+    JNE  F3_ALREADY
+    MOV  book3Status, 0
+    JMP  F3_SUCCESS
+F3_C4:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book4Title
+    CALL CMP_UPPER
+    JNE  F3_C5
+    CMP  book4Status, 1
+    JNE  F3_ALREADY
+    MOV  book4Status, 0
+    JMP  F3_SUCCESS
+F3_C5:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book5Title
+    CALL CMP_UPPER
+    JNE  F3_NOTFOUND
+    CMP  book5Status, 1
+    JNE  F3_ALREADY
+    MOV  book5Status, 0
+    JMP  F3_SUCCESS
+
+
+F3_SUCCESS:
+    PRINT_STR borrowOK
+    RET
+F3_ALREADY:
+    PRINT_STR borrowAlready
+    RET
+F3_NOTFOUND:
+    PRINT_STR borrowNF
+    RET
+FEATURE3_BORROW ENDP
+
+
+; =============================================================================
+; FEATURE 4: BOOK RETURN WITH FINE CALCULATION
+; =============================================================================
+FEATURE4_FINE PROC
+    PRINT_STR fineHeader
+    PRINT_STR finePrompt
+    CALL READ_INPUT
+
+
+    LEA  SI, inputBuf + 2
+    CALL TO_UPPER_SI
+
+
+    LEA  DI, inputBuf + 2
+    LEA  SI, book1Title
+    CALL CMP_UPPER
+    JNE  F4_C2
+    CMP  book1Status, 0
+    JNE  F4_NOT_BORROWED
+    MOV  book1Status, 1
+    JMP  F4_CALC_FINE
+F4_C2:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book2Title
+    CALL CMP_UPPER
+    JNE  F4_C3
+    CMP  book2Status, 0
+    JNE  F4_NOT_BORROWED
+    MOV  book2Status, 1
+    JMP  F4_CALC_FINE
+F4_C3:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book3Title
+    CALL CMP_UPPER
+    JNE  F4_C4
+    CMP  book3Status, 0
+    JNE  F4_NOT_BORROWED
+    MOV  book3Status, 1
+    JMP  F4_CALC_FINE
+F4_C4:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book4Title
+    CALL CMP_UPPER
+    JNE  F4_C5
+    CMP  book4Status, 0
+    JNE  F4_NOT_BORROWED
+    MOV  book4Status, 1
+    JMP  F4_CALC_FINE
+F4_C5:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book5Title
+    CALL CMP_UPPER
+    JNE  F4_NOT_FOUND
+    CMP  book5Status, 0
+    JNE  F4_NOT_BORROWED
+    MOV  book5Status, 1
+
+
+F4_CALC_FINE:
+    PRINT_STR returnOK
+    PRINT_STR fineDaysMsg
+    CALL READ_DAYS
+
+
+    MOV  AX, daysLate
+     CMP  AX, 0
+    JE   F4_NO_FINE
+     CMP  AX, 1
+    JE   F4_NO_FINE
+    CMP  AX, 2
+    JE   F4_NO_FINE
+    
+    
+    SUB AX,2
+    MOV  BL, finePerDay
+    MOV  BH, 0
+    MUL  BX
+    MOV  fineResult, AX
+
+
+    PRINT_STR fineMsg
+    MOV  AX, fineResult
+    CALL PRINT_NUM_WORD
+    PRINT_STR fineTaka
+    RET
+
+
+F4_NO_FINE:
+    PRINT_STR noFineMsg
+    RET
+F4_NOT_BORROWED:
+    PRINT_STR notBorrowed
+    RET
+F4_NOT_FOUND:
+    PRINT_STR bookNF
+    RET
+FEATURE4_FINE ENDP
+
+
+; =============================================================================
+; FEATURE 5: BOOK RATING SYSTEM
+;
+; Logic:
+;   - Displays top-rated books (all books with their average ratings)
+;   - User enters a book title
+;   - Book must be AVAILABLE (status=1) meaning it was already returned
+;   - Accepts a single digit 1-5
+;   - Adds to RatingSum, increments RatingCount
+;   - Calculates and displays integer average (RatingSum / RatingCount)
+;   - Shows "Top Rated Books" list with averages at the end
+; =============================================================================
+FEATURE5_RATING PROC
+F5R_DISPLAY:
+    PRINT_STR rateHeader
+
+
+    ; ---- Show current ratings for all books ----
+    PRINT_STR rateTopHeader
+
+
+    ; Book 1
+    PRINT_STR labelTitle
+    PRINT_STR book1Title
+    PRINT_STR CRLF
+    CMP  book1RatingCount, 0
+    JE   F5R_B1_NONE
+    PRINT_STR rateAvgLabel
+    MOV  AL, book1RatingSum
+    MOV  AH, 0
+    MOV  BL, book1RatingCount
+    MOV  BH, 0
+    DIV  BL                      ; AL = average
+    CALL PRINT_NUM_BYTE
+    PRINT_STR rateSlash
+    PRINT_STR rateFive
+    PRINT_STR CRLF
+    PRINT_STR rateCountLabel
+    MOV  AL, book1RatingCount
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+    JMP  F5R_B2
+F5R_B1_NONE:
+    PRINT_STR rateNoRating
+    PRINT_STR CRLF
+
+
+    ; Book 2
+F5R_B2:
+    PRINT_STR labelTitle
+    PRINT_STR book2Title
+    PRINT_STR CRLF
+    CMP  book2RatingCount, 0
+    JE   F5R_B2_NONE
+    PRINT_STR rateAvgLabel
+    MOV  AL, book2RatingSum
+    MOV  AH, 0
+    MOV  BL, book2RatingCount
+    MOV  BH, 0
+    DIV  BL
+    CALL PRINT_NUM_BYTE
+    PRINT_STR rateSlash
+    PRINT_STR rateFive
+    PRINT_STR CRLF
+    PRINT_STR rateCountLabel
+    MOV  AL, book2RatingCount
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+    JMP  F5R_B3
+F5R_B2_NONE:
+    PRINT_STR rateNoRating
+    PRINT_STR CRLF
+
+
+    ; Book 3
+F5R_B3:
+    PRINT_STR labelTitle
+    PRINT_STR book3Title
+    PRINT_STR CRLF
+    CMP  book3RatingCount, 0
+    JE   F5R_B3_NONE
+    PRINT_STR rateAvgLabel
+    MOV  AL, book3RatingSum
+    MOV  AH, 0
+    MOV  BL, book3RatingCount
+    MOV  BH, 0
+    DIV  BL
+    CALL PRINT_NUM_BYTE
+    PRINT_STR rateSlash
+    PRINT_STR rateFive
+    PRINT_STR CRLF
+    PRINT_STR rateCountLabel
+    MOV  AL, book3RatingCount
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+    JMP  F5R_B4
+F5R_B3_NONE:
+    PRINT_STR rateNoRating
+    PRINT_STR CRLF
+
+
+    ; Book 4
+F5R_B4:
+    PRINT_STR labelTitle
+    PRINT_STR book4Title
+    PRINT_STR CRLF
+    CMP  book4RatingCount, 0
+    JE   F5R_B4_NONE
+    PRINT_STR rateAvgLabel
+    MOV  AL, book4RatingSum
+    MOV  AH, 0
+    MOV  BL, book4RatingCount
+    MOV  BH, 0
+    DIV  BL
+    CALL PRINT_NUM_BYTE
+    PRINT_STR rateSlash
+    PRINT_STR rateFive
+    PRINT_STR CRLF
+    PRINT_STR rateCountLabel
+    MOV  AL, book4RatingCount
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+    JMP  F5R_B5
+F5R_B4_NONE:
+    PRINT_STR rateNoRating
+    PRINT_STR CRLF
+
+
+    ; Book 5
+F5R_B5:
+    PRINT_STR labelTitle
+    PRINT_STR book5Title
+    PRINT_STR CRLF
+    CMP  book5RatingCount, 0
+    JE   F5R_B5_NONE
+    PRINT_STR rateAvgLabel
+    MOV  AL, book5RatingSum
+    MOV  AH, 0
+    MOV  BL, book5RatingCount
+    MOV  BH, 0
+    DIV  BL
+    CALL PRINT_NUM_BYTE
+    PRINT_STR rateSlash
+    PRINT_STR rateFive
+    PRINT_STR CRLF
+    PRINT_STR rateCountLabel
+    MOV  AL, book5RatingCount
+    CALL PRINT_NUM_BYTE
+    PRINT_STR CRLF
+    JMP  F5R_INPUT
+F5R_B5_NONE:
+    PRINT_STR rateNoRating
+    PRINT_STR CRLF
+
+
+    ; ---- Ask user which book to rate ----
+F5R_INPUT:
+    PRINT_STR rateSepLine
+    PRINT_STR ratePrompt
+    CALL READ_INPUT
+
+
+    LEA  SI, inputBuf + 2
+    CALL TO_UPPER_SI
+
+
+    ; ---- Match book title ----
+    LEA  DI, inputBuf + 2
+    LEA  SI, book1Title
+    CALL CMP_UPPER
+    JNE  F5R_C2
+    ; Book must be Available (returned) to be rated
+    CMP  book1Status, 1
+    JNE  F5R_NOT_AVAIL
+    CALL READ_RATING             ; AL = validated rating digit (1-5), or 0 on invalid
+    CMP  AL, 0
+    JE   F5R_BAD_RATING
+    ADD  book1RatingSum, AL
+    INC  book1RatingCount
+    JMP  F5R_RATE_DONE
+
+
+F5R_C2:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book2Title
+    CALL CMP_UPPER
+    JNE  F5R_C3
+    CMP  book2Status, 1
+    JNE  F5R_NOT_AVAIL
+    CALL READ_RATING
+    CMP  AL, 0
+    JE   F5R_BAD_RATING
+    ADD  book2RatingSum, AL
+    INC  book2RatingCount
+    JMP  F5R_RATE_DONE
+
+
+F5R_C3:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book3Title
+    CALL CMP_UPPER
+    JNE  F5R_C4
+    CMP  book3Status, 1
+    JNE  F5R_NOT_AVAIL
+    CALL READ_RATING
+    CMP  AL, 0
+    JE   F5R_BAD_RATING
+    ADD  book3RatingSum, AL
+    INC  book3RatingCount
+    JMP  F5R_RATE_DONE
+
+
+F5R_C4:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book4Title
+    CALL CMP_UPPER
+    JNE  F5R_C5
+    CMP  book4Status, 1
+    JNE  F5R_NOT_AVAIL
+    CALL READ_RATING
+    CMP  AL, 0
+    JE   F5R_BAD_RATING
+    ADD  book4RatingSum, AL
+    INC  book4RatingCount
+    JMP  F5R_RATE_DONE
+
+
+F5R_C5:
+    LEA  DI, inputBuf + 2
+    LEA  SI, book5Title
+    CALL CMP_UPPER
+    JNE  F5R_NF
+    CMP  book5Status, 1
+    JNE  F5R_NOT_AVAIL
+    CALL READ_RATING
+    CMP  AL, 0
+    JE   F5R_BAD_RATING
+    ADD  book5RatingSum, AL
+    INC  book5RatingCount
+    JMP  F5R_RATE_DONE
+
+
+F5R_RATE_DONE:
+    PRINT_STR rateOK
+    PRINT_STR CRLF
+    ; show updated ratings
+    JMP  F5R_DISPLAY
+
+
+F5R_NOT_AVAIL:
+    PRINT_STR rateNotAvail
+    RET
+
+
+F5R_NF:
+    PRINT_STR rateNotFound
+    RET
+
+
+F5R_BAD_RATING:
+    PRINT_STR rateInvalid
+    RET
+
+
+FEATURE5_RATING ENDP
+
+
+; =============================================================================
+; READ_RATING
+; Reads a single keypress (1-5). Echoes character.
+; Returns: AL = numeric value (1-5) if valid, AL = 0 if invalid.
+; =============================================================================
+READ_RATING PROC
+    PRINT_STR rateScaleMsg
+
+
+    MOV  AH, 01H
+    INT  21H                 ; AL = typed character
+
+
+    MOV  BL, AL              ; SAVE INPUT
+
+
+    PRINT_STR CRLF
+
+
+    MOV  AL, BL              ; RESTORE INPUT
+
+
+    CMP  AL, '1'
+    JB   RR_INVALID
+
+
+    CMP  AL, '5'
+    JA   RR_INVALID
+
+
+    SUB  AL, '0'
+    RET
+
+
+RR_INVALID:
+    MOV  AL, 0
+    RET
+READ_RATING ENDP
+
+
+; =============================================================================
+; FEATURE 6: VIEW ALL BOOKS
+; =============================================================================
+FEATURE6_VIEWALL PROC
+    PRINT_STR viewHeader
+    CALL PRINT_BOOK1
+    CALL PRINT_BOOK2
+    CALL PRINT_BOOK3
+    CALL PRINT_BOOK4
+    CALL PRINT_BOOK5
+    RET
+FEATURE6_VIEWALL ENDP
+
+
+; =============================================================================
+; PRINT_BOOK1 .. PRINT_BOOK5
+; =============================================================================
+PRINT_BOOK1 PROC
+    PRINT_STR labelTitle
+    PRINT_STR book1Title
+    PRINT_STR CRLF
+    PRINT_STR labelAuthor
+    PRINT_STR book1Author
+    PRINT_STR CRLF
+    PRINT_STR labelGenre
+    PRINT_STR book1Genre
+    PRINT_STR CRLF
+    PRINT_STR labelStatus
+    CMP  book1Status, 1
+    JNE  PB1_BORROW
+    PRINT_STR statusAvail
+    PRINT_STR CRLF
+    RET
+PB1_BORROW:
+    PRINT_STR statusBorrow
+    PRINT_STR CRLF
+    RET
+PRINT_BOOK1 ENDP
+
+
+PRINT_BOOK2 PROC
+    PRINT_STR labelTitle
+    PRINT_STR book2Title
+    PRINT_STR CRLF
+    PRINT_STR labelAuthor
+    PRINT_STR book2Author
+    PRINT_STR CRLF
+    PRINT_STR labelGenre
+    PRINT_STR book2Genre
+    PRINT_STR CRLF
+    PRINT_STR labelStatus
+    CMP  book2Status, 1
+    JNE  PB2_BORROW
+    PRINT_STR statusAvail
+    PRINT_STR CRLF
+    RET
+PB2_BORROW:
+    PRINT_STR statusBorrow
+    PRINT_STR CRLF
+    RET
+PRINT_BOOK2 ENDP
+
+
+PRINT_BOOK3 PROC
+    PRINT_STR labelTitle
+    PRINT_STR book3Title
+    PRINT_STR CRLF
+    PRINT_STR labelAuthor
+    PRINT_STR book3Author
+    PRINT_STR CRLF
+    PRINT_STR labelGenre
+    PRINT_STR book3Genre
+    PRINT_STR CRLF
+    PRINT_STR labelStatus
+    CMP  book3Status, 1
+    JNE  PB3_BORROW
+    PRINT_STR statusAvail
+    PRINT_STR CRLF
+    RET
+PB3_BORROW:
+    PRINT_STR statusBorrow
+    PRINT_STR CRLF
+    RET
+PRINT_BOOK3 ENDP
+
+
+PRINT_BOOK4 PROC
+    PRINT_STR labelTitle
+    PRINT_STR book4Title
+    PRINT_STR CRLF
+    PRINT_STR labelAuthor
+    PRINT_STR book4Author
+    PRINT_STR CRLF
+    PRINT_STR labelGenre
+    PRINT_STR book4Genre
+    PRINT_STR CRLF
+    PRINT_STR labelStatus
+    CMP  book4Status, 1
+    JNE  PB4_BORROW
+    PRINT_STR statusAvail
+    PRINT_STR CRLF
+    RET
+PB4_BORROW:
+    PRINT_STR statusBorrow
+    PRINT_STR CRLF
+    RET
+PRINT_BOOK4 ENDP
+
+
+PRINT_BOOK5 PROC
+    PRINT_STR labelTitle
+    PRINT_STR book5Title
+    PRINT_STR CRLF
+    PRINT_STR labelAuthor
+    PRINT_STR book5Author
+    PRINT_STR CRLF
+    PRINT_STR labelGenre
+    PRINT_STR book5Genre
+    PRINT_STR CRLF
+    PRINT_STR labelStatus
+    CMP  book5Status, 1
+    JNE  PB5_BORROW
+    PRINT_STR statusAvail
+    PRINT_STR CRLF
+    RET
+PB5_BORROW:
+    PRINT_STR statusBorrow
+    PRINT_STR CRLF
+    RET
+PRINT_BOOK5 ENDP
+
+
+; =============================================================================
+; READ_INPUT
+; =============================================================================
+READ_INPUT PROC
+    MOV  BYTE PTR [inputBuf],   28
+    MOV  BYTE PTR [inputBuf+1],  0
+    LEA  DX, inputBuf
+    MOV  AH, 0AH
+    INT  21H
+    MOV  BL, [inputBuf+1]
+    MOV  BH, 0
+    MOV  SI, BX
+    MOV  BYTE PTR [inputBuf+2+SI], '$'
+    RET
+READ_INPUT ENDP
+
+
+; =============================================================================
+; READ_DAYS
+; =============================================================================
+READ_DAYS PROC
+    MOV  daysLate, 0
+    MOV  tempWord, 0
+    MOV  CX, 0
+
+
+RD_LOOP:
+    MOV  AH, 01H
+    INT  21H
+    CMP  AL, 0DH
+    JE   RD_DONE
+    CMP  AL, '0'
+    JB   RD_LOOP
+    CMP  AL, '9'
+    JA   RD_LOOP
+    CMP  CX, 2
+    JAE  RD_LOOP
+
+
+    SUB  AL, '0'
+    MOV  AH, 0
+    PUSH AX
+    MOV  AX, tempWord
+    MOV  BX, 10
+    MUL  BX
+    POP  BX
+    ADD  AX, BX
+    MOV  tempWord, AX
+    INC  CX
+    JMP  RD_LOOP
+
+
+RD_DONE:
+    MOV  AX, tempWord
+    MOV  daysLate, AX
+    PRINT_STR CRLF
+    RET
+READ_DAYS ENDP
+
+
+; =============================================================================
+; TO_UPPER_SI
+; =============================================================================
+TO_UPPER_SI PROC
+TU_LOOP:
+    MOV  AL, [SI]
+    CMP  AL, '$'
+    JE   TU_DONE
+    CMP  AL, 'a'
+    JB   TU_NEXT
+    CMP  AL, 'z'
+    JA   TU_NEXT
+    SUB  AL, 32
+    MOV  [SI], AL
+TU_NEXT:
+    INC  SI
+    JMP  TU_LOOP
+TU_DONE:
+    RET
+TO_UPPER_SI ENDP
+
+
+; =============================================================================
+; CMP_UPPER
+; =============================================================================
+CMP_UPPER PROC
+CU_NEXT:
+    MOV  AL, [SI]
+    CMP  AL, 'a'
+    JB   CU_NO_CONV
+    CMP  AL, 'z'
+    JA   CU_NO_CONV
+    SUB  AL, 32
+CU_NO_CONV:
+    MOV  BL, [DI]
+    CMP  AL, '$'
+    JE   CU_CHECK_END
+    CMP  AL, BL
+    JNE  CU_NOT_EQ
+    INC  SI
+    INC  DI
+    JMP  CU_NEXT
+CU_CHECK_END:
+    CMP  BL, '$'
+    JNE  CU_NOT_EQ
+    XOR  AX, AX
+    CMP  AX, AX
+    RET
+CU_NOT_EQ:
+    MOV  AX, 1
+    OR   AX, AX
+    RET
+CMP_UPPER ENDP
+
+
+; =============================================================================
+; PARTIAL_MATCH
+; =============================================================================
+PARTIAL_MATCH PROC
+    PUSH SI
+    PUSH DI
+    PUSH BX
+    PUSH CX
+
+
+    MOV  BX, DI
+    MOV  CX, 0
+PM_LEN:
+    MOV  AL, [BX]
+    CMP  AL, '$'
+    JE   PM_GOT_LEN
+    INC  CX
+    INC  BX
+    JMP  PM_LEN
+PM_GOT_LEN:
+
+
+PM_OUTER:
+    MOV  AL, [SI]
+    CMP  AL, '$'
+    JE   PM_NO_MATCH
+
+
+    PUSH SI
+    PUSH DI
+    PUSH CX
+
+
+    MOV  BX, CX
+PM_INNER:
+    CMP  BX, 0
+    JE   PM_INNER_MATCH
+    MOV  AL, [SI]
+    CMP  AL, '$'
+    JE   PM_INNER_FAIL
+    CMP  AL, 'a'
+    JB   PM_NO_LC
+    CMP  AL, 'z'
+    JA   PM_NO_LC
+    SUB  AL, 32
+PM_NO_LC:
+    MOV  AH, [DI]
+    CMP  AL, AH
+    JNE  PM_INNER_FAIL
+    INC  SI
+    INC  DI
+    DEC  BX
+    JMP  PM_INNER
+
+
+PM_INNER_MATCH:
+    POP  CX
+    POP  DI
+    POP  SI
+    POP  CX
+    POP  BX
+    POP  DI
+    POP  SI
+    XOR  AX, AX
+    RET
+
+
+PM_INNER_FAIL:
+    POP  CX
+    POP  DI
+    POP  SI
+    INC  SI
+    JMP  PM_OUTER
+
+
+PM_NO_MATCH:
+    POP  CX
+    POP  BX
+    POP  DI
+    POP  SI
+    MOV  AX, 1
+    OR   AX, AX
+    RET
+PARTIAL_MATCH ENDP
+
+
+; =============================================================================
+; PRINT_NUM_BYTE
+; =============================================================================
+PRINT_NUM_BYTE PROC
+    PUSH AX
+    PUSH BX
+    PUSH CX
+    PUSH DX
+
+
+    MOV  AH, 0
+    MOV  BL, 100
+    DIV  BL
+    MOV  CH, AL
+    MOV  AL, AH
+    MOV  AH, 0
+    MOV  BL, 10
+    DIV  BL
+    MOV  CL, AL
+    MOV  BL, AH
+
+
+    MOV  AH, 02H
+    CMP  CH, 0
+    JE   PNB_TENS
+    MOV  DL, CH
+    ADD  DL, '0'
+    INT  21H
+PNB_TENS:
+    CMP  CL, 0
+    JE   PNB_CHECK_TENS_ZERO
+    MOV  DL, CL
+    ADD  DL, '0'
+    INT  21H
+    JMP  PNB_ONES
+PNB_CHECK_TENS_ZERO:
+    CMP  CH, 0
+    JE   PNB_ONES
+    MOV  DL, '0'
+    INT  21H
+PNB_ONES:
+    MOV  DL, BL
+    ADD  DL, '0'
+    INT  21H
+
+
+    POP  DX
+    POP  CX
+    POP  BX
+    POP  AX
+    RET
+PRINT_NUM_BYTE ENDP
+
+
+; =============================================================================
+; PRINT_NUM_WORD
+; =============================================================================
+PRINT_NUM_WORD PROC
+    PUSH AX
+    PUSH BX
+    PUSH CX
+    PUSH DX
+
+
+    MOV  BX, 10
+    MOV  CX, 0
+
+
+    CMP  AX, 0
+    JNE  PNW_EXTRACT
+    MOV  DL, '0'
+    MOV  AH, 02H
+    INT  21H
+    JMP  PNW_DONE
+
+
+PNW_EXTRACT:
+    CMP  AX, 0
+    JE   PNW_PRINT
+    MOV  DX, 0
+    DIV  BX
+    PUSH DX
+    INC  CX
+    JMP  PNW_EXTRACT
+
+
+PNW_PRINT:
+    CMP  CX, 0
+    JE   PNW_DONE
+    POP  DX
+    ADD  DL, '0'
+    MOV  AH, 02H
+    INT  21H
+    DEC  CX
+    JMP  PNW_PRINT
+
+
+PNW_DONE:
+    POP  DX
+    POP  CX
+    POP  BX
+    POP  AX
+    RET
+PRINT_NUM_WORD ENDP
+
+
+END MAIN
